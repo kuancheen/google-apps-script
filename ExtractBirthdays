@@ -1,0 +1,185 @@
+/*
+
+Need to do
+----------
+
+1. Check out to put error handling if the fils have been change and the range are not found
+
+*/
+
+
+function onOpen(e) {
+   
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.alert('Do you want to rerun the script to extract the birthday and anniversary dates from all Homes DB.\n\nThis may take few minutes', ui.ButtonSet.YES_NO);
+
+  // Process the user's response.
+  if (response == ui.Button.YES) {
+    ui.alert(extractDates('MANUAL'));
+  }
+  
+}
+
+
+function extractDates(triggersource) {
+ 
+  var versionnumber = 'v0.5';
+
+  var count = 0;
+  var maxcount = 6;//DEBUG
+  
+  var defaultuser = 'kuancheen@gmail.com';
+  var currentuser = Session.getActiveUser().getEmail();
+
+  //Folder Name: NEW DB Format JUN2016
+  //Folder ID: 0B_OJR1O81GWjWnNodkpscFdvdTQ   
+  var files = DriveApp.getFolderById("0B_OJR1O81GWjWnNodkpscFdvdTQ").getFilesByType(MimeType.GOOGLE_SHEETS);
+  
+  //Log Worksheet Name: Master Birthday/Anniversary Extractor
+  var MASTER_WORKSHEET_ID = '1SRzUX7eBBLptgoAUdGUW9N0JjGp1oNDD7MCYSwmPtt0'
+//  var masterworksheet = SpreadsheetApp.getActive();//Get Current Sheet (if open from Master Sheet)
+  var masterworksheet = SpreadsheetApp.openById(MASTER_WORKSHEET_ID);     
+  var mastersheet = masterworksheet.getSheets()[0];
+  var masterrange;
+  var masterLastRow;
+  
+  //Log Worksheet Name: Master Birthday/Anniversary Log
+  var LOG_WORKSHEET_ID = '1T1jeZjOQ1-y5xbTC1mp9LEU1JOXVzRl9aZWrlGNNnSA'
+  var logworksheet = SpreadsheetApp.openById(LOG_WORKSHEET_ID);     
+  var logsheet = logworksheet.getSheets()[0];
+
+  //Birthday Worksheet Name: Public Birthday Listing
+  var BIRTHDAY_WORKSHEET_ID = '1eHfVL6ilBINXBWN3NA8St0cDbUyKJYrTJnU1ZGqPY5o'
+  var birthdayworksheet = SpreadsheetApp.openById(BIRTHDAY_WORKSHEET_ID);     
+  var birthdaysheet = birthdayworksheet.getSheets()[0];
+  var BIRTHDAY_QUERYSTRING = '=QUERY(IMPORTRANGE("1SRzUX7eBBLptgoAUdGUW9N0JjGp1oNDD7MCYSwmPtt0", "Sheet1!A:I"), "SELECT Col1, Col2, Col3, Col4, Col6, Col5 WHERE (Col1 IS NOT NULL) AND (Col1 != """") AND (Col6 IS NOT NULL) ORDER BY Col6, Col5", 1)'
+      
+  //Anniversary Worksheet Name: Master Birthday/Anniversary Log
+  var ANNIVERSARY_WORKSHEET_ID = '18c4srmT3uZ8QGE6eIZ3LKKzglnb58yfn2X9hBkOoCiU'
+  var anniversaryworksheet = SpreadsheetApp.openById(ANNIVERSARY_WORKSHEET_ID);     
+  var anniversarysheet = anniversaryworksheet.getSheets()[0];
+  var ANNIVERSARY_QUERYSTRING = '=QUERY(IMPORTRANGE("1SRzUX7eBBLptgoAUdGUW9N0JjGp1oNDD7MCYSwmPtt0", "Sheet1!A:I"), "SELECT Col1, Col2, Col3, Col4, Col7, Col9, Col8 WHERE (Col1 IS NOT NULL) AND (Col1 != """") AND (Col9 IS NOT NULL) ORDER BY Col9, Col8", 1)'
+  
+  var extractworksheet;     
+  var extractsheet;
+  var extractrange;
+  var extractLastRow;
+
+  //Clear the Log Sheet (History stored in the Sheet's Revision)
+  logsheet.clearContents();
+
+  logsheet.appendRow([(new Date()).toISOString(), (new Date()).toLocaleString(), 'START', '>>>>>>>>>>>>>>>>>>>>']);
+  logsheet.appendRow([(new Date()).toISOString(), (new Date()).toLocaleString(), 'extractDates():', versionnumber]);
+  logsheet.appendRow([(new Date()).toISOString(), (new Date()).toLocaleString(), 'SCRIPT RUN BY:', currentuser]);
+  logsheet.appendRow([(new Date()).toISOString(), (new Date()).toLocaleString(), 'TRIGGER SOURCE:', triggersource]);
+
+  Logger.log('START\t>>>>>>>>>>>>>>>>>>>>');
+  Logger.log('extractDates():\t' + versionnumber);
+  Logger.log('SCRIPT RUN BY:\t' + currentuser + "\tTRIGGER SOURCE:\t" + triggersource);
+
+  //Resets the Public Listing and repopulate the formula to avoid the case of data not able to be overwritten automatically. "Unable to append data in A1244."
+  birthdaysheet.clearContents();
+  birthdaysheet.appendRow([BIRTHDAY_QUERYSTRING]);
+  anniversarysheet.clearContents();
+  anniversarysheet.appendRow([ANNIVERSARY_QUERYSTRING]);
+  
+  //Clear the Master Sheet
+  mastersheet.clearContents();
+
+  //Recreate the Table header
+  mastersheet.appendRow(["Name", "Age Group", "Homes Code", "Status", "DOB DD", "DOB MM", "Marital Status", "Anniversary DD", "Anniversary MM"]);
+
+
+  //Loop through the files
+  while (files.hasNext()) {
+//  while (files.hasNext() && count < maxcount) {//DEBUG
+    var file = files.next();
+    var filename = file.getName();
+    var fileid = file.getId();
+    var homecode;
+
+    //Only do for SpreadSheet '* DB'
+    if (filename.search(' DB') >= 0){
+//    if (filename.search('PJ15 DB') >= 0){//DEBUG
+      homecode = filename.substring(0, filename.search(' DB'));
+      logsheet.appendRow([(new Date()).toISOString(), (new Date()).toLocaleString(), 'PROCESSING:', homecode]);
+
+      extractworksheet = SpreadsheetApp.openById(fileid);
+      extractsheet = extractworksheet.getSheets()[1];
+
+      masterLastRow = mastersheet.getLastRow();
+      extractLastRow = extractsheet.getLastRow();
+      
+      //Only copy if there is data (Header Rows = 2)
+      if (extractLastRow > 2){
+        
+        extractrange = extractsheet.getRange(3, 1, extractLastRow - 2);//Column A: Name
+        masterrange = mastersheet.getRange(masterLastRow + 1, 1, extractLastRow - 2);//Column A: Name
+        masterrange.setValues(extractrange.getValues());
+        
+        extractrange = extractsheet.getRange(3, 5, extractLastRow - 2);//Column E:  Age Group
+        masterrange = mastersheet.getRange(masterLastRow + 1, 2, extractLastRow - 2);//Column B: Age Group
+        masterrange.setValues(extractrange.getValues());
+        
+        masterrange = mastersheet.getRange(masterLastRow + 1, 3, extractLastRow - 2);//Column C: Homes Code
+        masterrange.setValue(homecode);
+        
+        extractrange = extractsheet.getRange(3, 20, extractLastRow - 2);//Column T: Name
+        masterrange = mastersheet.getRange(masterLastRow + 1, 4, extractLastRow - 2);//Column D: Status
+        masterrange.setValues(extractrange.getValues());
+        
+        extractrange = extractsheet.getRange(3, 8, extractLastRow - 2);//Column H: DOB DD
+        masterrange = mastersheet.getRange(masterLastRow + 1, 5, extractLastRow - 2);//Column E: DOB DD
+        masterrange.setValues(extractrange.getValues());
+        
+        extractrange = extractsheet.getRange(3, 9, extractLastRow - 2);//Column I: DOB MM
+        masterrange = mastersheet.getRange(masterLastRow + 1, 6, extractLastRow - 2);//Column F: DOB MM
+        masterrange.setValues(extractrange.getValues());
+        
+        extractrange = extractsheet.getRange(3, 11, extractLastRow - 2);//Column K: Marital Status
+        masterrange = mastersheet.getRange(masterLastRow + 1, 7, extractLastRow - 2);//Column G: Marital Status
+        masterrange.setValues(extractrange.getValues());
+        
+        extractrange = extractsheet.getRange(3, 12, extractLastRow - 2);//Column L: Anniversary DD
+        masterrange = mastersheet.getRange(masterLastRow + 1, 8, extractLastRow - 2);//Column H: Anniversary DD
+        masterrange.setValues(extractrange.getValues());
+        
+        extractrange = extractsheet.getRange(3, 13, extractLastRow - 2);//Column M: Anniversary MM
+        masterrange = mastersheet.getRange(masterLastRow + 1, 9, extractLastRow - 2);//Column I: Anniversary MM
+        masterrange.setValues(extractrange.getValues());
+        
+        logsheet.getRange(logsheet.getLastRow(),5).setValue("ROW PROCESSED: " + (extractLastRow - 2));
+        Logger.log('PROCESSING:\t' + homecode + "\tROW PROCESSED:\t" + (extractLastRow - 2));
+
+      }else{
+        
+        logsheet.getRange(logsheet.getLastRow(),5).setValue("NO RECORDS");
+        Logger.log('PROCESSING:\t' + homecode + "\tNO RECORDS");
+
+      }
+
+    }
+    
+    count++;
+  }
+  
+  logsheet.appendRow([(new Date()).toISOString(), (new Date()).toLocaleString(), 'END', '<<<<<<<<<<<<<<<<<<<<']);
+  Logger.log('END\t<<<<<<<<<<<<<<<<<<<<');
+
+
+  if (defaultuser != currentuser){
+    MailApp.sendEmail(defaultuser,
+                      'Google Script: extractDates() ran by unknown user',
+                      Logger.getLog());
+  }
+  
+  
+
+  return "DONE!";
+
+
+};
+
+
+
+
